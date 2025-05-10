@@ -126,3 +126,68 @@ export const toggleFavoriteRecipe = async (id: string): Promise<boolean> => {
     throw new Error('Favori durumu değiştirilemedi.');
   }
 };
+
+// src/services/recipeStorageService.ts
+// Mevcut fonksiyonlarınıza ek olarak:
+
+/**
+ * Belirli bir sayfadaki ve kategorideki tarifleri yükler
+ */
+export const loadRecipesByPage = async (
+  page: number, 
+  limit: number,
+  categoryId?: string | null
+): Promise<Recipe[]> => {
+  try {
+    // Tüm tarifleri yükle
+    const allRecipes = await loadRecipes();
+    
+    // Kategori filtresi uygula (varsa)
+    let filteredRecipes = allRecipes;
+    if (categoryId) {
+      filteredRecipes = allRecipes.filter(recipe => recipe.categoryId === categoryId);
+    }
+    
+    // Tarifleri son eklenme tarihine göre sırala (en yeni en üstte)
+    // Not: Eğer tariflerinizde ekleme tarihi yoksa bu kısmı değiştirin
+    const sortedRecipes = [...filteredRecipes].sort((a, b) => {
+      // Tariflerde createdAt/updatedAt alanı yoksa
+      // Bu alanları eklemek için verileri güncelleyin
+      const dateA = a.createdAt || 0;
+      const dateB = b.createdAt || 0;
+      return dateB - dateA;
+    });
+    
+    // Sayfalandırma uygula
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const paginatedRecipes = sortedRecipes.slice(startIndex, endIndex);
+    
+    return paginatedRecipes;
+  } catch (e) {
+    console.error('Tarifler yüklenirken hata oluştu:', e);
+    throw new Error('Tarifler yüklenemedi.');
+  }
+};
+
+/**
+ * Toplam sayfa sayısını hesaplar
+ */
+export const getTotalPages = async (
+  limit: number,
+  categoryId?: string | null
+): Promise<number> => {
+  try {
+    const allRecipes = await loadRecipes();
+    
+    let filteredRecipes = allRecipes;
+    if (categoryId) {
+      filteredRecipes = allRecipes.filter(recipe => recipe.categoryId === categoryId);
+    }
+    
+    return Math.ceil(filteredRecipes.length / limit);
+  } catch (e) {
+    console.error('Toplam sayfa sayısı hesaplanırken hata oluştu:', e);
+    throw new Error('Toplam sayfa sayısı hesaplanamadı.');
+  }
+};

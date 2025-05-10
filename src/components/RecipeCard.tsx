@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { StyleSheet, View, Image, TouchableOpacity } from 'react-native';
 import { Card, Title, Paragraph, IconButton, Chip } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
@@ -124,4 +124,15 @@ const styles = StyleSheet.create({
   },
 });
 
-export default RecipeCard;
+// memo ile sarmalayarak gereksiz yeniden renderları önlüyoruz
+export default memo(RecipeCard, (prevProps, nextProps) => {
+  // Sadece gerekli özellikler değiştiğinde yeniden render
+  return (
+    prevProps.recipe.id === nextProps.recipe.id &&
+    prevProps.recipe.isFavorite === nextProps.recipe.isFavorite &&
+    prevProps.recipe.title === nextProps.recipe.title &&
+    prevProps.recipe.description === nextProps.recipe.description &&
+    prevProps.recipe.imageUrl === nextProps.recipe.imageUrl &&
+    prevProps.recipe.categoryId === nextProps.recipe.categoryId
+  );
+});

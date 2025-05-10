@@ -13,6 +13,7 @@ export interface Recipe {
     instructions: string[];
     isFavorite: boolean;
     categoryId?: string; // Kategori alanı
+    createdAt?: number; // Ekleme tarihi (timestamp)
     nutritionInfo?: NutritionInfo; // Beslenme bilgileri
     dietTypeIds?: string[]; // Diyet tipi alanları (keto, vegan, vs)
     mealTypeId?: string; // Öğün tipi (kahvaltı, öğle, akşam, atıştırmalık)

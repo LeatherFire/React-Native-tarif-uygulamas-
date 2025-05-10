@@ -1,7 +1,15 @@
 // src/store/recipeStore.ts
 import { create } from 'zustand';
 import { Recipe } from '../constants/mockData';
-import { loadRecipes, saveRecipe, loadFavoriteRecipes, toggleFavoriteRecipe,deleteRecipe } from '../services/recipeStorageService';
+import { 
+  loadRecipes, 
+  loadRecipesByPage, 
+  getTotalPages,
+  saveRecipe, 
+  loadFavoriteRecipes, 
+  toggleFavoriteRecipe,
+  deleteRecipe 
+} from '../services/recipeStorageService';
 import uuid from 'react-native-uuid'; // Normal uuid yerine bu import'u kullanın
 
 interface RecipeState {
@@ -9,37 +17,121 @@ interface RecipeState {
   favoriteIds: string[];
   isLoading: boolean;
   error: string | null;
+  currentPage: number;
+  totalPages: number;
+  hasMoreRecipes: boolean;
+  isFetchingNextPage: boolean;
 
   // Eylemler
   loadAllRecipes: () => Promise<void>;
+  loadRecipesByPage: (page: number, limit: number, categoryId?: string | null) => Promise<void>;
+  loadMoreRecipes: (limit: number, categoryId?: string | null) => Promise<void>;
+  resetPagination: () => void;
   addOrUpdateRecipe: (recipe: Partial<Recipe>) => Promise<Recipe>;
   deleteRecipe: (id: string) => Promise<void>;
   toggleFavorite: (id: string) => Promise<void>;
   loadFavorites: () => Promise<void>;
 }
 
+// Sayfa başına gösterilecek tarif sayısı
+export const RECIPES_PER_PAGE = 10;
+
 export const useRecipeStore = create<RecipeState>((set, get) => ({
   recipes: [],
   favoriteIds: [],
   isLoading: false,
   error: null,
+  currentPage: 1,
+  totalPages: 1,
+  hasMoreRecipes: true,
+  isFetchingNextPage: false,
 
+  // Tüm tarifleri tek seferde yükleme (küçük veri setleri için)
   loadAllRecipes: async () => {
     set({ isLoading: true, error: null });
     try {
       const recipes = await loadRecipes();
       const favoriteIds = await loadFavoriteRecipes();
       
-      // Tarifleri favoriler listesine göre güncelle
       const updatedRecipes = recipes.map(recipe => ({
         ...recipe,
         isFavorite: favoriteIds.includes(recipe.id)
       }));
       
-      set({ recipes: updatedRecipes, favoriteIds, isLoading: false });
+      set({ 
+        recipes: updatedRecipes, 
+        favoriteIds, 
+        isLoading: false,
+        currentPage: 1,
+        totalPages: Math.ceil(updatedRecipes.length / RECIPES_PER_PAGE),
+        hasMoreRecipes: updatedRecipes.length > RECIPES_PER_PAGE
+      });
     } catch (err: any) {
       set({ error: err.message, isLoading: false });
     }
+  },
+
+    // Sayfalandırmalı tarif yükleme
+  loadRecipesByPage: async (page: number, limit: number, categoryId?: string | null) => {
+    // İlk sayfa ise loading true, sonraki sayfalar ise isFetchingNextPage true
+    const isFirstPage = page === 1;
+    
+    set({ 
+      isLoading: isFirstPage, 
+      isFetchingNextPage: !isFirstPage,
+      error: null 
+    });
+    
+    try {
+      const paginatedRecipes = await loadRecipesByPage(page, limit, categoryId);
+      const totalPages = await getTotalPages(limit, categoryId);
+      const favoriteIds = await loadFavoriteRecipes();
+      
+      // Tariflere favori bilgisini ekle
+      const recipesWithFavorites = paginatedRecipes.map(recipe => ({
+        ...recipe,
+        isFavorite: favoriteIds.includes(recipe.id)
+      }));
+      
+      set(state => ({
+        // İlk sayfa ise önceki tarifleri temizle, değilse ekle
+        recipes: page === 1 
+          ? recipesWithFavorites 
+          : [...state.recipes, ...recipesWithFavorites],
+        favoriteIds,
+        currentPage: page,
+        totalPages,
+        hasMoreRecipes: page < totalPages,
+        isLoading: false,
+        isFetchingNextPage: false
+      }));
+    } catch (err: any) {
+      set({ 
+        error: err.message, 
+        isLoading: false, 
+        isFetchingNextPage: false 
+      });
+    }
+  },
+
+  // Daha fazla tarif yükleme (mevcut sayfadan sonraki sayfa)
+  loadMoreRecipes: async (limit: number, categoryId?: string | null) => {
+    const { currentPage, hasMoreRecipes, isFetchingNextPage } = get();
+    
+    // Daha fazla sayfa yoksa veya zaten yükleme yapılıyorsa işlemi durdur
+    if (!hasMoreRecipes || isFetchingNextPage) return;
+    
+    const nextPage = currentPage + 1;
+    await get().loadRecipesByPage(nextPage, limit, categoryId);
+  },
+
+  // Sayfalandırmayı sıfırlama
+  resetPagination: () => {
+    set({
+      currentPage: 1,
+      recipes: [],
+      hasMoreRecipes: true
+    });
   },
 
   // src/store/recipeStore.ts dosyanızdaki addOrUpdateRecipe fonksiyonunu güncelleme
@@ -62,6 +154,7 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
         instructions: recipeData.instructions || [],
         categoryId: recipeData.categoryId || 'diger', // Kategori ID'si, varsayılan olarak "diger"
         isFavorite: false, // Başlangıçta favori olmamalı
+        createdAt: recipeData.createdAt || Date.now(), // Şimdiki zaman
         nutritionInfo: recipeData.nutritionInfo, // Beslenme bilgileri
         dietTypeIds: recipeData.dietTypeIds, // Diyet tipleri
         mealTypeId: recipeData.mealTypeId, // Öğün tipi
